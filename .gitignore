@@ -1,0 +1,39 @@
+# System
+node_modules/
+.env
+.DS_Store
+Thumbs.db
+__pycache__/
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+
+# Backend
+backend/node_modules/
+backend/uploads/*
+backend/balanced_dataset/
+backend/image_dataset/
+backend/processed_data/
+backend/__pycache__/
+backend/.keras/
+
+# Data & Logs
+*.log
+*.txt
+*.png
+*.jpg
+*.jpeg
+*.heic
+temp/
+tmp/
+class_counts.json
+metadata.json
+label_map.json
+check_db.js
+
+# Exclude large datasets strictly
+**/uploads/
+**/dataset/
+**/processed_data/
