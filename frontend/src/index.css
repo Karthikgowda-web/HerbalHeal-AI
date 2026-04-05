@@ -1,0 +1,52 @@
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;0,700;1,300;1,400;1,500;1,600;1,700&family=Inter:wght@100..900&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-serif: "Cormorant Garamond", serif;
+  --font-sans: "Inter", sans-serif;
+  
+  --color-sage-50: #f4f7f4;
+  --color-sage-100: #e6ede6;
+  --color-sage-200: #ceddce;
+  --color-sage-300: #a7bfa7;
+  --color-sage-400: #7a9c7a;
+  --color-sage-500: #5a7d5a;
+  --color-sage-600: #456145;
+  --color-sage-700: #394f39;
+  --color-sage-800: #304130;
+  --color-sage-900: #293729;
+  --color-sage-950: #1a231a;
+
+  --animate-float: float 20s ease-in-out infinite;
+  --animate-scan: scan 2s linear infinite;
+
+  @keyframes float {
+    0%, 100% { transform: translateY(0) rotate(0deg); }
+    33% { transform: translateY(-20px) rotate(5deg); }
+    66% { transform: translateY(10px) rotate(-5deg); }
+  }
+
+  @keyframes scan {
+    0% { top: 0%; opacity: 0; }
+    10% { opacity: 1; }
+    90% { opacity: 1; }
+    100% { top: 100%; opacity: 0; }
+  }
+}
+
+body {
+  @apply bg-sage-50 text-sage-900 font-sans antialiased;
+}
+
+.serif {
+  @apply font-serif;
+}
+
+.perspective-1000 {
+  perspective: 1000px;
+}
+
+.preserve-3d {
+  transform-style: preserve-3d;
+}
+
