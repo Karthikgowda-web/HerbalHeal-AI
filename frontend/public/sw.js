@@ -10,34 +10,34 @@ self.addEventListener('activate', (event) => {
   event.waitUntil(clients.claim());
 });
 
-// Fetch Event - Stale While Revalidate
+// Fetch Event - Network First Strategy with /models Exclusion
 self.addEventListener('fetch', (event) => {
-  // We only cache GET requests
+  // 1. We only cache GET requests
   if (event.request.method !== 'GET') return;
 
+  const url = new URL(event.request.url);
+
+  // 2. EXCLUSION RULE: Never cache or intercept requests to the /models directory
+  if (url.pathname.includes('/models')) {
+    return; // Pass through to network normally
+  }
+
+  // 3. NETWORK FIRST STRATEGY
   event.respondWith(
-    caches.match(event.request).then((cachedResponse) => {
-      const fetchPromise = fetch(event.request).then((networkResponse) => {
-        // Don't cache invalid responses or non-successful API calls
-        if (!networkResponse || networkResponse.status !== 200 || networkResponse.type !== 'basic') {
-          return networkResponse;
+    fetch(event.request)
+      .then((networkResponse) => {
+        // If we have a valid network response, cache it and return it
+        if (networkResponse && networkResponse.status === 200 && networkResponse.type === 'basic') {
+          const responseToCache = networkResponse.clone();
+          caches.open(CACHE_NAME).then((cache) => {
+            cache.put(event.request, responseToCache);
+          });
         }
-
-        // Clone the response because it's a stream and can only be consumed once
-        const responseToCache = networkResponse.clone();
-        
-        caches.open(CACHE_NAME).then((cache) => {
-          cache.put(event.request, responseToCache);
-        });
-
         return networkResponse;
-      }).catch((err) => {
-        // Fallback for API boundaries if we are completely offline and have no cache
-        console.warn('Network request failed and no cache available', err);
-      });
-
-      // Return the cached response immediately if there is one, otherwise wait for the network
-      return cachedResponse || fetchPromise;
-    })
+      })
+      .catch(() => {
+        // If network fails, try to serve from cache
+        return caches.match(event.request);
+      })
   );
 });

@@ -1,11 +1,11 @@
 {
-  "name": "HerbalHeal Identification System",
+  "name": "HerbalHeal",
   "short_name": "HerbalHeal",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#f4f7f4",
   "theme_color": "#5a7d5a",
-  "description": "Premium botanical intelligence and traditional remedy references.",
+  "description": "Invisible botanical intelligence and trilingual remedy bridge.",
   "icons": [
     {
       "src": "/icon.svg",
