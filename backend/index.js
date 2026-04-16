@@ -56,6 +56,15 @@ app.post('/api/identify', upload.single('image'), (req, res) => {
         env: { ...process.env, PYTHONUNBUFFERED: '1' }
     });
 
+    pyProcess.on('error', (err) => {
+        console.error(`[AI] Spawn Error: ${err.message}`);
+        return res.status(500).json({ 
+            message: 'Failed to start AI process. Command not found?', 
+            error: err.message,
+            command: pythonCommand 
+        });
+    });
+
     let predictionData = '';
     let errorData = '';
 
