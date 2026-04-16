@@ -27,10 +27,6 @@ def predict_plant(image_path):
     try:
         # Load compiled keras Model
         model = load_model(model_path)
-        
-        # 1. Verification Log
-        sys.stderr.write("\n=== EMERGENCY DEBUG PIPELINE ===\n")
-        model.summary(print_fn=lambda x: sys.stderr.write(x + '\n'))
 
         # Data Consistency Check: Load Labels dynamically
         with open(labels_path, 'r') as f:

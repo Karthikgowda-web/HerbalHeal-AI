@@ -1,13 +1,18 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Camera, Upload, X, Leaf, Info, AlertTriangle, Loader2, Download, Share2, FileText, Image as ImageIcon, Bookmark, BookmarkCheck, LayoutGrid } from 'lucide-react';
+import { Camera, Upload, X, Leaf, Info, AlertTriangle, Loader2, Download, Share2, FileText, Image as ImageIcon, Bookmark, BookmarkCheck, LayoutGrid, Edit2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import ReactMarkdown from 'react-markdown';
 import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
 import { identifyPlant, suggestPlantsByIllness, type IdentificationResult, type PlantSuggestion } from './services/geminiService';
+import { remedyBank, type RemedyData } from './data/remedyBank';
 import { savePlantToLibrary, getSavedPlants, type SavedPlant } from './services/databaseService';
 import { cn } from './lib/utils';
+import axios from 'axios';
+import { ResultCard } from './components/ResultCard';
 
+import { Navbar } from './components/Navbar';
+import { useAuth } from './context/AuthContext';
 
 
 type TabType = 'overview' | 'remedies' | 'alternatives' | 'cnn';
@@ -29,7 +34,7 @@ export default function App() {
   const [isIdentifying, setIsIdentifying] = useState(false);
   const [result, setResult] = useState<IdentificationResult | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [currentHistoryId, setCurrentHistoryId] = useState<string | null>(null);  const fileInputRef = useRef<HTMLInputElement>(null);
   const [isCameraOpen, setIsCameraOpen] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -37,6 +42,7 @@ export default function App() {
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearching, setIsSearching] = useState(false);
   const [suggestions, setSuggestions] = useState<PlantSuggestion[] | null>(null);
+  const [searchTimeout, setSearchTimeout] = useState<NodeJS.Timeout | null>(null);
 
   const [isSaving, setIsSaving] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
@@ -46,6 +52,7 @@ export default function App() {
   const [librarySearch, setLibrarySearch] = useState('');
   const [selectedLanguage, setSelectedLanguage] = useState<'en' | 'hi' | 'kn'>('en');
 
+  const { user: currentUser, token } = useAuth();
   const [toastMsg, setToastMsg] = useState<{ message: string, visible: boolean }>({ message: '', visible: false });
 
   const showToast = (message: string) => {
@@ -109,6 +116,19 @@ export default function App() {
   };
 
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  const [isStandalone, setIsStandalone] = useState(false);
+  const [isIOS, setIsIOS] = useState(false);
+  const [showInstallModal, setShowInstallModal] = useState(false);
+
+  useEffect(() => {
+    if (window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone) {
+      setIsStandalone(true);
+    }
+
+    const ua = window.navigator.userAgent;
+    const isIOSDevice = /iPad|iPhone|iPod/.test(ua) && !(window as any).MSStream;
+    setIsIOS(isIOSDevice);
+  }, []);
 
   useEffect(() => {
     if (mode === 'library') {
@@ -136,6 +156,18 @@ export default function App() {
         setError(null);
       };
       reader.readAsDataURL(file);
+    }
+  };
+  const handleInstallClick = () => {
+    if (deferredPrompt) {
+      deferredPrompt.prompt();
+      deferredPrompt.userChoice.then((choiceResult: any) => {
+        if (choiceResult.outcome === 'accepted') {
+          setDeferredPrompt(null);
+        }
+      });
+    } else {
+      setShowInstallModal(true);
     }
   };
 
@@ -180,10 +212,31 @@ export default function App() {
     if (!image) return;
     setIsIdentifying(true);
     setError(null);
+    setCurrentHistoryId(null);
     try {
       const data = await identifyPlant(image);
       setResult(data);
       setIsSaved(false); 
+      
+      axios.post('http://localhost:5000/api/history', {
+        commonName: data.name || (data as any).plant_name || 'Unknown',
+        scientificName: data.scientific_name || 'Unknown',
+        remedies: data.remedies || {},
+        imagePath: image,
+        timestamp: new Date()
+      }).then((res) => {
+        console.log("History persistence response:", res);
+        if (res.status !== 201) {
+          alert('Warning: History auto-save did not return expected status (201).');
+        }
+        if (res.data?.historyId) {
+          setCurrentHistoryId(res.data.historyId);
+        }
+      }).catch((e) => {
+        console.error('Failed to auto-save history:', e);
+        alert('Server error preventing history save.');
+      });
+      
     } catch (err) {
       setError("Failed to identify plant. Please try a clearer photo.");
       console.error(err);
@@ -206,81 +259,208 @@ export default function App() {
     setIsSaved(false);
   };
 
-  const handleSearch = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!searchQuery.trim()) return;
-    setIsSearching(true);
-    setError(null);
-    setSuggestions(null);
-    setResult(null);
-    try {
-      const data = await suggestPlantsByIllness(searchQuery);
-      setSuggestions(data);
-    } catch (err) {
-      setError("Failed to find suggestions. Please try another illness or condition.");
-      console.error(err);
-    } finally {
-      setIsSearching(false);
+  const handleLocalSearch = (query: string) => {
+    setSearchQuery(query);
+    if (searchTimeout) clearTimeout(searchTimeout);
+
+    if (!query.trim()) {
+      setSuggestions(null);
+      return;
     }
+
+    setIsSearching(true);
+    
+    // Instant fuzzy matching logic
+    const timeout = setTimeout(() => {
+      const normalizedQuery = query.toLowerCase().trim();
+      
+      const matches: PlantSuggestion[] = [];
+      
+      Object.keys(remedyBank).forEach(key => {
+        const item = remedyBank[key];
+        const isMatch = key.includes(normalizedQuery) || 
+                       item.name.toLowerCase().includes(normalizedQuery) ||
+                       item.tags.some(tag => tag.includes(normalizedQuery));
+        
+        if (isMatch) {
+          matches.push({
+            name: item.name,
+            scientificName: item.scientificName,
+            description: item.description[selectedLanguage],
+            howItHelps: item.howItHelps[selectedLanguage],
+            preparation: item.preparation[selectedLanguage]
+          });
+        }
+      });
+
+      setSuggestions(matches.length > 0 ? matches : null);
+      setIsSearching(false);
+    }, 300); // 300ms Debounce
+
+    setSearchTimeout(timeout);
   };
 
   const [isExporting, setIsExporting] = useState<'pdf' | 'jpg' | null>(null);
 
-  const handleDownloadPDF = async () => {
-    if (!pdfRef.current || isExporting) return;
+  const handleDownloadPDF = () => {
+    const printElement = document.getElementById('export-container');
+    if (!printElement || isExporting) return;
+    
+    console.log("Download Started (PDF)");
     setIsExporting('pdf');
     setError(null);
-    try {
-      const canvas = await html2canvas(pdfRef.current, { 
-        scale: 2,
-        useCORS: true,
-        logging: false,
-        backgroundColor: '#f9fafb' 
-      });
-      const imgData = canvas.toDataURL('image/png');
-      const pdf = new jsPDF('p', 'mm', 'a4');
-      const imgProps = pdf.getImageProperties(imgData);
-      const pdfWidth = pdf.internal.pageSize.getWidth();
-      const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
-      
-      
-      
-      pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
-      pdf.save(`${result?.name || (result as any)?.plant_name || 'herbal-report'}.pdf`);
-    } catch (err) {
-      console.error("PDF Export Error:", err);
-      setError("Failed to generate PDF. Please try again.");
-    } finally {
-      setIsExporting(null);
-    }
+    
+    // 500ms delay to ensure DOM is fully painted
+    setTimeout(async () => {
+      try {
+        const canvas = await html2canvas(printElement, { 
+          scale: 2,
+          useCORS: true,
+          allowTaint: true,
+          logging: false,
+          backgroundColor: '#f9fafb' 
+        });
+        
+        const imgData = canvas.toDataURL('image/png');
+        const pdf = new jsPDF('p', 'mm', 'a4');
+        const imgProps = pdf.getImageProperties(imgData);
+        const pdfWidth = pdf.internal.pageSize.getWidth();
+        const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
+        
+        // Using 'FAST' compression to avoid memory timeouts
+        pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight, undefined, 'FAST');
+        pdf.save(`${result?.name || 'herbal-report'}.pdf`);
+        console.log("Download Complete (PDF)");
+      } catch (err) {
+        console.error("PDF Export Error:", err);
+        setError("Failed to generate PDF. Please try again.");
+      } finally {
+        setIsExporting(null);
+      }
+    }, 500);
   };
 
-  const handleDownloadJPG = async () => {
-    if (!resultRef.current || isExporting) return;
+  const handleDownloadJPG = () => {
+    const printElement = document.getElementById('export-container');
+    if (!printElement || isExporting) return;
+    
+    console.log("Download Started (JPG)");
     setIsExporting('jpg');
     setError(null);
-    try {
-      const canvas = await html2canvas(resultRef.current, { 
-        scale: 2,
-        useCORS: true,
-        logging: false,
-        backgroundColor: '#f9fafb'
-      });
-      const link = document.createElement('a');
-      link.download = `${result?.name || (result as any)?.plant_name || 'herbal-report'}.jpg`;
-      link.href = canvas.toDataURL('image/jpeg', 0.9);
-      link.click();
-    } catch (err) {
-      console.error("JPG Export Error:", err);
-      setError("Failed to generate Image. Please try again.");
-    } finally {
-      setIsExporting(null);
-    }
+    
+    setTimeout(async () => {
+      try {
+        const canvas = await html2canvas(printElement, { 
+          scale: 2,
+          useCORS: true,
+          allowTaint: true,
+          logging: false,
+          backgroundColor: '#f9fafb'
+        });
+        
+        // Virtual <a> tag method for maximum reliability
+        const link = document.createElement('a');
+        link.download = `${result?.name || 'herbal-report'}.jpg`;
+        link.href = canvas.toDataURL('image/jpeg', 0.9);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        
+        console.log("Download Complete (JPG)");
+      } catch (err) {
+        console.error("JPG Export Error:", err);
+        setError("Failed to generate Image. Please try again.");
+      } finally {
+        setIsExporting(null);
+      }
+    }, 500);
   };
 
   return (
     <div className="min-h-screen bg-sage-50 pb-12 relative overflow-hidden perspective-1000">
       {}
+      <AnimatePresence>
+        {!isStandalone && (
+          <motion.button 
+            initial={{ opacity: 0, scale: 0.5, y: 100 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.5, y: 100 }}
+            whileHover={{ scale: 1.1 }}
+            whileTap={{ scale: 0.9 }}
+            onClick={handleInstallClick}
+            className="fixed bottom-6 right-6 z-40 sm:hidden w-14 h-14 bg-sage-900 text-white rounded-full shadow-2xl flex items-center justify-center border-4 border-white"
+          >
+            <Download className="w-6 h-6" />
+          </motion.button>
+        )}
+      </AnimatePresence>
+
+      {}
+      <AnimatePresence>
+        {showInstallModal && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-sage-900/60 backdrop-blur-sm"
+            onClick={() => setShowInstallModal(false)}
+          >
+            <motion.div 
+              initial={{ scale: 0.9, y: 20 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.9, y: 20 }}
+              className="bg-white rounded-[2.5rem] p-8 max-w-sm w-full shadow-2xl relative overflow-hidden"
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="absolute top-0 right-0 w-32 h-32 bg-sage-50 rounded-bl-full -mr-8 -mt-8" />
+              
+              <div className="relative">
+                <div className="w-12 h-12 bg-sage-900 rounded-2xl flex items-center justify-center mb-6">
+                  <Download className="w-6 h-6 text-white" />
+                </div>
+                
+                <h3 className="text-2xl font-serif font-bold text-sage-900 mb-2">Install HerbalHeal</h3>
+                <p className="text-sage-500 text-sm mb-6 font-medium leading-relaxed">
+                  Add HerbalHeal to your home screen for instant botanical analysis and offline records.
+                </p>
+                
+                <div className="space-y-4 bg-sage-50 p-6 rounded-2xl mb-8 border border-sage-100">
+                  {isIOS ? (
+                    <div className="flex gap-4 items-start">
+                      <div className="w-6 h-6 rounded-full bg-white flex items-center justify-center text-[10px] font-black shrink-0 border border-sage-200">1</div>
+                      <p className="text-xs text-sage-700 font-bold leading-relaxed">
+                        Tap the <span className="inline-block p-1 bg-white rounded border border-sage-200"><Share2 className="w-3 h-3 inline" /> Share</span> icon in your Safari browser.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="flex gap-4 items-start">
+                      <div className="w-6 h-6 rounded-full bg-white flex items-center justify-center text-[10px] font-black shrink-0 border border-sage-200">1</div>
+                      <p className="text-xs text-sage-700 font-bold leading-relaxed">
+                        Open your browser menu (usually three dots) and look for <span className="text-sage-900 font-black italic">"Install App"</span> or <span className="text-sage-900 font-black italic">"Add to Home Screen"</span>.
+                      </p>
+                    </div>
+                  )}
+                  {isIOS && (
+                    <div className="flex gap-4 items-start pt-2">
+                       <div className="w-6 h-6 rounded-full bg-white flex items-center justify-center text-[10px] font-black shrink-0 border border-sage-200">2</div>
+                      <p className="text-xs text-sage-700 font-bold leading-relaxed">
+                        Scroll down and select <span className="text-sage-900 font-black italic">"Add to Home Screen"</span>.
+                      </p>
+                    </div>
+                  )}
+                </div>
+                
+                <button 
+                  onClick={() => setShowInstallModal(false)}
+                  className="w-full py-4 bg-sage-900 text-white rounded-xl font-bold hover:bg-black transition-all shadow-xl shadow-sage-900/10"
+                >
+                  Got it!
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
       <AnimatePresence>
         {toastMsg.visible && (
           <motion.div
@@ -327,65 +507,8 @@ export default function App() {
       </div>
 
       {}
-      <header className="relative bg-white/80 backdrop-blur-md border-b border-sage-200/50 py-8 px-4 sticky top-0 z-30">
-        <div className="max-w-5xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <motion.div 
-              whileHover={{ 
-                rotateY: 180, 
-                rotateX: 15,
-                scale: 1.1,
-                z: 50
-              }}
-              transition={{ type: "spring", stiffness: 300, damping: 15 }}
-              className="bg-sage-900 p-2.5 rounded-2xl shadow-lg shadow-sage-900/20 preserve-3d"
-            >
-              <Leaf className="text-white w-6 h-6" />
-            </motion.div>
-            <div>
-              <h1 className="text-3xl font-serif font-bold text-sage-900 tracking-tight leading-none">HerbalHeal</h1>
-              <p className="text-sage-500 text-[10px] uppercase tracking-[0.2em] font-bold mt-1">Botanical Intelligence</p>
-            </div>
-          </div>
-          
-          <nav className="bg-sage-100/50 p-1 rounded-2xl border border-sage-200/50 flex gap-1">
-            {(['identify', 'search', 'library'] as ModeType[]).map((m) => (
-              <button
-                key={m}
-                onClick={() => { setMode(m); reset(); }}
-                className={cn(
-                  "px-5 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-all flex items-center gap-2",
-                  mode === m 
-                    ? "bg-white text-sage-900 shadow-sm ring-1 ring-sage-200" 
-                    : "text-sage-500 hover:text-sage-700"
-                )}
-              >
-                {m === 'identify' && <Camera className="w-3.5 h-3.5" />}
-                {m === 'search' && <Bookmark className="w-3.5 h-3.5" />}
-                {m === 'library' && <BookmarkCheck className="w-3.5 h-3.5" />}
-                {m}
-              </button>
-            ))}
-            
-            {deferredPrompt && (
-              <button
-                onClick={() => {
-                  deferredPrompt.prompt();
-                  deferredPrompt.userChoice.then((choiceResult: any) => {
-                    if (choiceResult.outcome === 'accepted') {
-                      setDeferredPrompt(null);
-                    }
-                  });
-                }}
-                className="px-5 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-all flex items-center gap-2 bg-sage-900 text-white shadow-sm ring-1 ring-sage-900 hover:bg-sage-800"
-              >
-                <Download className="w-3.5 h-3.5" />
-                Install App
-              </button>
-            )}
-          </nav>
-        </div>
-      </header>
+      {}
+      <Navbar mode={mode} setMode={setMode} reset={reset} />
 
       <main className="relative max-w-5xl mx-auto px-4 mt-12">
         <div className={cn("grid gap-12", mode === 'library' ? "grid-cols-1" : "grid-cols-1 lg:grid-cols-12")}>
@@ -406,7 +529,18 @@ export default function App() {
                   
                   <div className="relative">
                     <h2 className="text-2xl font-serif font-bold mb-2 text-sage-900">Identify Plant</h2>
-                    <p className="text-sage-500 text-sm mb-8">Capture or upload a photo of any medicinal herb.</p>
+                    <p className="text-sage-500 text-sm mb-4">Capture or upload a photo of any medicinal herb.</p>
+                    
+                    {error && (
+                      <motion.div 
+                        initial={{ opacity: 0, scale: 0.95 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        className="mb-6 p-4 bg-red-50 border border-red-100 text-red-600 rounded-2xl text-xs font-bold flex items-center gap-3"
+                      >
+                        <AlertTriangle className="w-5 h-5 flex-shrink-0" />
+                        {error}
+                      </motion.div>
+                    )}
                     
                     {!image && !isCameraOpen ? (
                       <div className="space-y-6">
@@ -517,12 +651,12 @@ export default function App() {
                     <h2 className="text-2xl font-serif font-bold mb-2 text-sage-900">Search Remedies</h2>
                     <p className="text-sage-500 text-sm mb-8">Find traditional herbal solutions for your condition.</p>
                     
-                    <form onSubmit={handleSearch} className="space-y-6">
+                    <form onSubmit={(e) => { e.preventDefault(); handleLocalSearch(searchQuery); }} className="space-y-6">
                       <div className="relative group">
                         <input
                           type="text"
                           value={searchQuery}
-                          onChange={(e) => setSearchQuery(e.target.value)}
+                          onChange={(e) => handleLocalSearch(e.target.value)}
                           placeholder="e.g., insomnia, cough, stress"
                           className="w-full px-6 py-5 bg-sage-50 border border-sage-100 rounded-2xl focus:outline-none focus:ring-2 focus:ring-sage-900/20 focus:bg-white transition-all text-sage-900 font-medium placeholder:text-sage-300"
                         />
@@ -636,12 +770,18 @@ export default function App() {
                             stiffness: 100,
                             damping: 15
                           }}
-                          className="bg-white rounded-[2.5rem] overflow-hidden shadow-xl shadow-sage-900/5 border border-sage-100 hover:shadow-sage-900/10 transition-all cursor-pointer group preserve-3d"
+                          className={cn(
+                            "bg-white rounded-[2.5rem] overflow-hidden shadow-xl shadow-sage-900/5 border border-sage-100 transition-all group preserve-3d",
+                            (!plant.remedies || Object.keys(plant.remedies).length === 0) 
+                              ? "opacity-60 cursor-not-allowed" 
+                              : "cursor-pointer hover:shadow-sage-900/10 hover:-translate-y-1"
+                          )}
                           onClick={() => {
+                            if (!plant.remedies || Object.keys(plant.remedies).length === 0) return;
                             
-                            if (plant.overview) {
+                            if (plant.overview || plant.remedies) {
                               setResult(plant);
-                              setImage(plant.image_url || plant.imageUrl);
+                              setImage(plant.imagePath || plant.image_url || plant.imageUrl);
                               setMode('identify');
                               setIsSaved(true);
                             } else {
@@ -650,11 +790,11 @@ export default function App() {
                           }}
                         >
                           <div className="aspect-[4/3] relative overflow-hidden">
-                            <img src={plant.image_url || plant.imageUrl} alt={plant.plant_name || plant.name} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" />
+                            <img src={plant.imagePath || plant.image_url || plant.imageUrl} alt={plant.commonName || plant.plant_name || plant.name} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" />
                             <div className="absolute inset-0 bg-gradient-to-t from-sage-900/80 via-sage-900/20 to-transparent flex items-end p-8">
                               <div>
-                                <h3 className="text-white text-2xl font-serif font-bold leading-tight">{plant.plant_name || plant.name}</h3>
-                                <p className="text-sage-200 text-xs italic mt-1 font-medium">{plant.scientific_name || (plant as any).scientificName || 'Medicinal Species'}</p>
+                                <h3 className="text-white text-2xl font-serif font-bold leading-tight">{plant.commonName || plant.plant_name || plant.name}</h3>
+                                <p className="text-sage-200 text-xs italic mt-1 font-medium">{plant.scientificName || plant.scientific_name || 'Medicinal Species'}</p>
                               </div>
                             </div>
                           </div>
@@ -662,8 +802,11 @@ export default function App() {
                               <p className="text-sage-600 text-sm line-clamp-2 leading-relaxed font-medium">
                                 {plant.overview?.[selectedLanguage] || (plant as any).description || 'Medicinal details available in full view.'}
                               </p>
-                            <div className="mt-6 flex items-center text-[10px] font-black uppercase tracking-widest text-sage-400 group-hover:text-sage-900 transition-colors">
-                              View Details <Share2 className="w-3 h-3 ml-2" />
+                            <div className={cn(
+                              "mt-6 flex items-center text-[10px] font-black uppercase tracking-widest transition-colors",
+                              (!plant.remedies || Object.keys(plant.remedies).length === 0) ? "text-sage-300" : "text-sage-400 group-hover:text-sage-900"
+                            )}>
+                              {(!plant.remedies || Object.keys(plant.remedies).length === 0) ? "No Details Available" : "View Details"} <Share2 className="w-3 h-3 ml-2" />
                             </div>
                           </div>
                         </motion.div>
@@ -806,7 +949,9 @@ export default function App() {
                 </motion.div>
               ) : result ? (
                 <motion.div
+                  id="export-container"
                   key="result"
+                  ref={resultRef}
                   initial={{ opacity: 0, scale: 0.95, rotateY: 10 }}
                   animate={{ opacity: 1, scale: 1, rotateY: 0 }}
                   whileHover={{ rotateY: -2, rotateX: 1, z: 5 }}
@@ -814,7 +959,7 @@ export default function App() {
                   className="space-y-8 preserve-3d"
                 >
                   {}
-                  <div className="flex p-1.5 bg-white/50 backdrop-blur-md rounded-2xl border border-sage-200 shadow-sm">
+                  <div className="flex p-1.5 bg-white/50 backdrop-blur-md rounded-2xl border border-sage-200 shadow-sm" ref={pdfRef}>
                     {(['overview', 'remedies', 'alternatives', 'cnn'] as TabType[]).map((tab) => (
                       <button
                         key={tab}
@@ -867,8 +1012,9 @@ export default function App() {
                             
                             <div className="relative">
                               <div className="mb-10">
-                                <span className="text-[10px] font-black uppercase tracking-[0.3em] text-sage-400 mb-2 block">Botanical Classification</span>
-                                <h2 className="text-5xl font-serif font-bold text-white leading-tight">{(result?.name || (result as any)?.plant_name)?.replace(/_/g, ' ') || 'Searching...'}</h2>
+                                <div className="flex items-center justify-between">
+                                  <h2 className="text-5xl font-serif font-bold text-white leading-tight">{(result?.name || (result as any)?.plant_name)?.replace(/_/g, ' ') || 'Searching...'}</h2>
+                                </div>
                                 <p className="text-sage-300 italic font-serif text-2xl mt-1">{result?.scientific_name || ''}</p>
                               </div>
                               
@@ -1024,60 +1170,12 @@ export default function App() {
                     </AnimatePresence>
 
                     {}
-                    <div className="space-y-4 pt-4">
-                      <motion.button 
-                        whileHover={{ scale: 1.02 }}
-                        whileTap={{ scale: 0.98 }}
-                        onClick={handleArchive}
-                        disabled={isSaving || isSaved}
-                        type="button"
-                        className={cn(
-                          "w-full py-5 rounded-2xl font-bold flex items-center justify-center gap-3 transition-all shadow-xl",
-                          isSaved 
-                            ? "bg-sage-200 text-sage-800 border-2 border-sage-300"
-                            : "bg-sage-900 text-white hover:bg-sage-800 border-2 border-transparent"
-                        )}
-                      >
-                        {isSaving ? (
-                          <Loader2 className="w-6 h-6 animate-spin" />
-                        ) : isSaved ? (
-                          <>
-                             <BookmarkCheck className="w-6 h-6" />
-                             ✅ Saved to Library
-                          </>
-                        ) : (
-                          <>
-                            <Bookmark className="w-6 h-6" />
-                            Archive to Library
-                          </>
-                        )}
-                      </motion.button>
-                      
-                      <div className="flex flex-col sm:flex-row gap-4">
-                        <motion.button 
-                          whileHover={{ scale: 1.02 }}
-                          whileTap={{ scale: 0.98 }}
-                          onClick={handleDownloadPDF}
-                          disabled={isExporting !== null}
-                          type="button"
-                          className="flex-1 py-5 bg-sage-900/50 backdrop-blur-md border border-white/10 text-white rounded-2xl font-bold flex items-center justify-center gap-2 hover:bg-sage-900/80 transition-all shadow-lg shadow-black/20 disabled:opacity-50"
-                        >
-                          {isExporting === 'pdf' ? <Loader2 className="w-5 h-5 animate-spin" /> : <FileText className="w-5 h-5" />}
-                          {isExporting === 'pdf' ? "Generating..." : "Download as PDF"}
-                        </motion.button>
-                        <motion.button 
-                          whileHover={{ scale: 1.02 }}
-                          whileTap={{ scale: 0.98 }}
-                          onClick={handleDownloadJPG}
-                          disabled={isExporting !== null}
-                          type="button"
-                          className="flex-1 py-5 bg-sage-900/50 backdrop-blur-md border border-white/10 text-white rounded-2xl font-bold flex items-center justify-center gap-2 hover:bg-sage-900/80 transition-all shadow-lg shadow-black/20 disabled:opacity-50"
-                        >
-                          {isExporting === 'jpg' ? <Loader2 className="w-5 h-5 animate-spin" /> : <ImageIcon className="w-5 h-5" />}
-                          {isExporting === 'jpg' ? "Generating..." : "Download as JPG"}
-                        </motion.button>
-                      </div>
-                    </div>
+                    <ResultCard 
+                      historyId={currentHistoryId}
+                      isExporting={isExporting}
+                      onDownloadPDF={handleDownloadPDF}
+                      onDownloadJPG={handleDownloadJPG}
+                    />
 
                     <p className="text-center text-sage-500 text-[10px] font-bold uppercase tracking-[0.2em] mt-8 max-w-md mx-auto leading-relaxed">
                       Disclaimer: Ethnobotanical data is for educational purposes. Consult clinical practitioners for medical intervention.

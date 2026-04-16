@@ -21,7 +21,8 @@ const PlantSchema = new mongoose.Schema({
   },
   medicinalProperties: [String],
   warnings: String,
-  imageUrl: String
+  imageUrl: String,
+  isVerified: { type: Boolean, default: false }
 }, { timestamps: true });
 
 module.exports = mongoose.model('Plant', PlantSchema);

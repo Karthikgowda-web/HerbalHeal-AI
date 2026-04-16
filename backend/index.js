@@ -1,4 +1,4 @@
-require('dotenv').config();
+require('dotenv').config({ path: require('path').join(__dirname, '.env') });
 const express = require('express');
 const cors = require('cors');
 const multer = require('multer');
@@ -13,26 +13,22 @@ const Archive = require('./models/Archive');
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-
-app.use(cors({ origin: 'http://localhost:3000' }));
-app.use(express.json());
-
+app.use(cors({ origin: ['http://localhost:3000', 'http://127.0.0.1:3000'] }));
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
 mongoose.connect(process.env.MONGO_URI || 'mongodb://localhost:27017/herbascan')
     .then(() => console.log('MongoDB connected'))
     .catch(err => console.error('MongoDB connection error:', err));
-
-
 
 const uploadDir = path.join(__dirname, 'uploads');
 if (!fs.existsSync(uploadDir)) {
     fs.mkdirSync(uploadDir);
 }
 
-
 const storage = multer.diskStorage({
     destination: (req, file, cb) => {
-        cb(null, 'uploads/');
+        cb(null, uploadDir);
     },
     filename: (req, file, cb) => {
         cb(null, `${Date.now()}-${file.originalname}`);
@@ -41,39 +37,49 @@ const storage = multer.diskStorage({
 
 const upload = multer({ storage: storage });
 
-
 app.get('/', (req, res) => {
     res.send('HerbaScan Backend is running!');
 });
 
 app.post('/api/identify', upload.single('image'), (req, res) => {
+    console.log(`[API] Received identification request. File: ${req.file?.originalname}`);
     if (!req.file) {
         return res.status(400).send({ message: 'No file uploaded' });
     }
 
     const imagePath = req.file.path;
-    const pythonScriptPath = path.join(__dirname, 'scripts', 'predict.py');
+    const pythonScriptPath = path.join(__dirname, 'scripts', 'predict_tflite.py');
+    console.log(`[AI] Spawning Python: ${pythonScriptPath} with image: ${imagePath}`);
 
     const pyProcess = spawn('python', [pythonScriptPath, imagePath]);
 
     let predictionData = '';
+    let errorData = '';
 
     pyProcess.stdout.on('data', (data) => {
         predictionData += data.toString();
     });
 
     pyProcess.stderr.on('data', (data) => {
-        console.error(`Python stderr: ${data}`);
+        errorData += data.toString();
+        console.error(`[Python Stderr]: ${data}`);
     });
 
     pyProcess.on('close', (code) => {
+        console.log(`[AI] Python process closed with code ${code}`);
         if (code !== 0) {
-            console.error(`Python process exited with code ${code}`);
-            return res.status(500).send({ message: 'Error processing image to predict plant.' });
+            console.error(`[AI] Error Detail: ${errorData}`);
+            return res.status(500).send({ message: 'Error processing image to predict plant.', error: errorData });
         }
         
         try {
-            const aiResult = JSON.parse(predictionData);
+            const startIdx = predictionData.indexOf('{');
+            const endIdx = predictionData.lastIndexOf('}');
+            if (startIdx === -1 || endIdx === -1) {
+                throw new Error("No JSON found in Python output");
+            }
+            const jsonStr = predictionData.substring(startIdx, endIdx + 1);
+            const aiResult = JSON.parse(jsonStr);
             console.log(`[DB] Attempting lookup for Plant ID: ${aiResult.plant_id} (${aiResult.prediction})`);
             
             Plant.findOne({ plant_id: aiResult.plant_id })
@@ -86,7 +92,7 @@ app.post('/api/identify', upload.single('image'), (req, res) => {
                             overview: { 
                                 en: "AI identified this plant, but we don't have its medicinal details in our current database yet.", 
                                 hi: "एआई ने इस पौधे की पहचान की है, लेकिन अभी हमारे पास इसका औषधीय विवरण नहीं है।", 
-                                kn: "AI ಈ ಸಸ್ಯವನ್ನು ಗುರುತಿಸಿದೆ, ಆದರೆ ನಮ್ಮ ಡೇಟಾಬೇಸ್‌ನಲ್ಲಿ ಇದರ ಔಷಧೀಯ ವಿವರಗಳು ಇನ್ನೂ ಲಭ್ಯವಿಲ್ಲ." 
+                                kn: "AI ಈ ಸಸ್ಯವನ್ನು ಗುರುತಿಸಿದೆ, ಆದರೆ ನಮ್ಮ ಡೇಟಾಬೇಸ್‌ನಲ್ಲಿ ಇದರ ಔಷಧೀಯ ವಿವರಗಳು ಇನ್ನೂ ಲಬ್ಯವಿಲ್ಲ." 
                             },
                             remedies: { 
                                 en: "No specific remedies found in local database.", 
@@ -105,7 +111,6 @@ app.post('/api/identify', upload.single('image'), (req, res) => {
                     }
 
                     console.log(`[DB] Successfully fetched trilingual data for: ${mongoData.name}`);
-                    
                     
                     const finalResponse = { 
                         name: mongoData.name, 
@@ -134,70 +139,21 @@ app.post('/api/identify', upload.single('image'), (req, res) => {
     });
 });
 
+app.use('/api/history', require('./controllers/history.controller'));
 
-app.post('/api/history', async (req, res) => {
+const authController = require('./controllers/auth.controller');
+app.post('/api/auth/login', authController.login);
+
+const { verifyToken } = require('./middleware/auth.middleware');
+app.patch('/api/remedies/:id/verify', verifyToken, async (req, res) => {
     try {
-        const { 
-            plant_name, scientific_name, image_url,
-            overview, remedies, alternatives,
-            medicinalProperties, warnings, cnnAnalysis
-        } = req.body;
-
-        if (!plant_name || !scientific_name || !image_url) {
-            return res.status(400).json({ message: 'Missing required fields: plant_name, scientific_name, image_url' });
-        }
-
-        const newHistory = new SavedSpecimen({
-            plant_name,
-            scientific_name,
-            image_url,
-            overview,
-            remedies,
-            alternatives,
-            medicinalProperties,
-            warnings,
-            cnnAnalysis
-        });
-
-        const savedHistory = await newHistory.save();
-        res.status(201).json(savedHistory);
+        const plant = await Plant.findByIdAndUpdate(req.params.id, { isVerified: true }, { new: true });
+        if (!plant) return res.status(404).json({ message: 'Plant not found' });
+        res.json({ success: true, plant });
     } catch (error) {
-        console.error('Error saving history:', error);
-        res.status(500).json({ message: 'Server error while saving history', error: error.message });
+        res.status(500).json({ message: 'Error verifying remedy', error: error.message });
     }
 });
-
-app.get('/api/history', async (req, res) => {
-    try {
-        const history = await SavedSpecimen.find().sort({ createdAt: -1 });
-        res.json(history);
-    } catch (error) {
-        console.error('Error fetching history:', error);
-        res.status(500).json({ message: 'Server error while fetching history', error: error.message });
-    }
-});
-
-
-app.post('/api/archive', async (req, res) => {
-    try {
-        const { name, scientificName, remedies, imageUrl, timestamp } = req.body;
-        console.log(`[Archive] Receiving specimen: ${name} (${scientificName})`);
-        
-        if (!name || !scientificName) {
-            console.warn('[Archive] Rejecting: Missing name or scientificName');
-            return res.status(400).json({ message: 'Missing required fields.' });
-        }
-
-        const newArchive = new Archive({ name, scientificName, remedies, imageUrl, timestamp });
-        const savedArchive = await newArchive.save();
-        console.log(`[Archive] Successfully persisted ${name} to SavedSpecimens collection.`);
-        res.status(201).json(savedArchive);
-    } catch (error) {
-        console.error('[Archive] Error:', error);
-        res.status(500).json({ message: 'Server error', error: error.message });
-    }
-});
-
 
 app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);

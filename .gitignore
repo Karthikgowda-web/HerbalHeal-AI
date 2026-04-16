@@ -1,39 +1,48 @@
-# System
+# Dependency directories
 node_modules/
+jspdf/
+html2canvas/
+
+# AI/ML Large files & Cache
+dataset/
+__pycache__/
+*.py[cod]
+*$py.class
+plant_model_backup.keras
+*.h5
+*.keras
+*.tflite
+!models/*.tflite
+!models/*.keras
+
+# Environment & Secrets
 .env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+backend/.env
+frontend/.env
+
+# OS/IDE Files
 .DS_Store
 Thumbs.db
-__pycache__/
+.vscode/
+.idea/
 
-# Frontend
-frontend/node_modules/
-frontend/dist/
-frontend/.vite/
-
-# Backend
-backend/node_modules/
+# Backend specific
 backend/uploads/*
-backend/balanced_dataset/
-backend/image_dataset/
-backend/processed_data/
-backend/__pycache__/
-backend/.keras/
+!backend/uploads/.gitkeep
+backend/response.json
 
-# Data & Logs
-*.log
-*.txt
-*.png
-*.jpg
-*.jpeg
-*.heic
-temp/
+# Frontend specific
+frontend/dist/
+frontend/dist-ssr/
+*.local
+
+# System/Temporary files
 tmp/
-class_counts.json
-metadata.json
-label_map.json
-check_db.js
-
-# Exclude large datasets strictly
-**/uploads/
-**/dataset/
-**/processed_data/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*

@@ -4,8 +4,11 @@ import axios from 'axios';
 export interface SavedPlant extends IdentificationResult {
   _id: string; 
   plant_name: string;
+  commonName?: string;
   scientific_name: string;
+  scientificName?: string;
   image_url: string;
+  imagePath?: string;
   createdAt: string;
 }
 

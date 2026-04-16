@@ -1,0 +1,5 @@
+{
+  "name": "HerbalHeal: AI Plant Identification",
+  "description": "Identify herbal plants and discover home remedies using AI-powered image recognition.",
+  "requestFramePermissions": ["camera"]
+}
