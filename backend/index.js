@@ -51,9 +51,10 @@ app.post('/api/identify', upload.single('image'), (req, res) => {
     const pythonScriptPath = path.join(__dirname, 'scripts', 'predict_tflite.py');
     console.log(`[AI] Spawning Python: ${pythonScriptPath} with image: ${imagePath}`);
 
-    const pythonCommand = process.env.NODE_ENV === 'production' ? 'python3' : 'python';
-    console.log(`[AI] Spawning with: ${pythonCommand} ${pythonScriptPath}`);
-    const pyProcess = spawn(pythonCommand, [pythonScriptPath, imagePath]);
+    const pythonCommand = 'python3';
+    const pyProcess = spawn(pythonCommand, [pythonScriptPath, imagePath], {
+        env: { ...process.env, PYTHONUNBUFFERED: '1' }
+    });
 
     let predictionData = '';
     let errorData = '';
