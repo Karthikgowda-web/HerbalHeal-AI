@@ -18,15 +18,18 @@ def predict_plant(image_path):
     if not os.path.exists(image_path):
         return {"error": "Image file not found."}
 
-    root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    root_dir = os.path.dirname(os.path.dirname(script_dir))
     model_path = os.path.join(root_dir, 'models', 'plant_model.tflite')
     labels_path = os.path.join(root_dir, 'models', 'labels.json')
 
     if not os.path.exists(model_path):
-        return {"error": "TFLite model not found."}
+        print(json.dumps({"error": f"Model not found at {model_path}"}))
+        sys.exit(1)
     
     if not os.path.exists(labels_path):
-        return {"error": "Model labels JSON not found."}
+        print(json.dumps({"error": f"Labels not found at {labels_path}"}))
+        sys.exit(1)
 
     try:
         # 1. Initialize TFLite interpreter
