@@ -41,8 +41,9 @@ app.get('/', (req, res) => {
     res.send('HerbaScan Backend is running!');
 });
 
-app.post('/api/identify', upload.single('image'), (req, res) => {
-    console.log(`[API] Received identification request. File: ${req.file?.originalname}`);
+app.post('/api/identify', upload.single('image'), async (req, res) => {
+    try {
+        console.log(`[API] Received identification request. File: ${req.file?.originalname}`);
     if (!req.file) {
         return res.status(400).send({ message: 'No file uploaded' });
     }
@@ -149,6 +150,10 @@ app.post('/api/identify', upload.single('image'), (req, res) => {
             res.status(500).send({ message: 'Invalid response from AI model.' });
         }
     });
+    } catch (routeErr) {
+        console.error(`[API] Global Route Crash: ${routeErr}`);
+        res.status(500).json({ status: "error", message: routeErr.message });
+    }
 });
 
 app.use('/api/history', require('./controllers/history.controller'));
