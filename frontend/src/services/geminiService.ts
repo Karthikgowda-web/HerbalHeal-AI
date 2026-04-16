@@ -37,7 +37,8 @@ export async function identifyPlant(base64Image: string): Promise<Identification
     const formData = new FormData();
     formData.append('image', blob, 'upload.jpg');
 
-    const response = await fetch('http://localhost:5000/api/identify', {
+    const baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api';
+    const response = await fetch(`${baseUrl}/identify`, {
       method: 'POST',
       body: formData,
     });

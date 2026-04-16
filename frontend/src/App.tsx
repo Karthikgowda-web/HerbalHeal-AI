@@ -218,7 +218,8 @@ export default function App() {
       setResult(data);
       setIsSaved(false); 
       
-      axios.post('http://localhost:5000/api/history', {
+      const baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api';
+      axios.post(`${baseUrl}/history`, {
         commonName: data.name || (data as any).plant_name || 'Unknown',
         scientificName: data.scientific_name || 'Unknown',
         remedies: data.remedies || {},
