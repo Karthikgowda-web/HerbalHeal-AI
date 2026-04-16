@@ -1,4 +1,4 @@
-
+import axios from 'axios';
 
 export interface IdentificationResult {
   name: string;
@@ -38,18 +38,12 @@ export async function identifyPlant(base64Image: string): Promise<Identification
     formData.append('image', blob, 'upload.jpg');
 
     const baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api';
-    const response = await fetch(`${baseUrl}/identify`, {
-      method: 'POST',
-      body: formData,
+    const response = await axios.post(`${baseUrl}/identify`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 60000
     });
 
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData.message || `Server error: ${response.statusText}`);
-    }
-
-    const data = await response.json();
-    return data as IdentificationResult;
+    return response.data as IdentificationResult;
   } catch (error: any) {
     console.error("Identification Service Error:", error);
     throw new Error(error.message || "Failed to identify plant correctly.");
