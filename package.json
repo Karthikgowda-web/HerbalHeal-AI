@@ -5,7 +5,7 @@
   "main": "index.js",
   "scripts": {
     "start": "node backend/index.js",
-    "build": "cd frontend && npm install && npm run build",
+    "build": "cd frontend && npm install && npm run build && cd .. && mkdir -p dist && cp -rv frontend/dist/* dist/",
     "dev": "concurrently \"cd backend && node index.js\" \"cd frontend && npm run dev\""
   },
   "devDependencies": {
