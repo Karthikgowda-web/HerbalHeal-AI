@@ -37,7 +37,10 @@ export async function identifyPlant(base64Image: string): Promise<Identification
     const formData = new FormData();
     formData.append('image', blob, 'upload.jpg');
 
-    const baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api';
+    let baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api';
+    if (!baseUrl.endsWith('/api')) {
+      baseUrl = baseUrl.replace(/\/$/, '') + '/api';
+    }
     const response = await axios.post(`${baseUrl}/identify`, formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
       timeout: 60000
