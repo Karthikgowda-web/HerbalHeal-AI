@@ -1,6 +1,6 @@
 import React from 'react';
 import { useAuth } from '../context/AuthContext';
-import { LayoutGrid, LogOut, ShieldAlert, User, Star, Camera, Bookmark, BookmarkCheck } from 'lucide-react';
+import { LayoutGrid, LogOut, ShieldAlert, User, Star, Camera, Bookmark, BookmarkCheck, Leaf } from 'lucide-react';
 import { motion } from 'motion/react';
 import { cn } from '../lib/utils';
 
