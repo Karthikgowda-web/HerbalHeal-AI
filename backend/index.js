@@ -51,6 +51,18 @@ app.get('/', (req, res) => {
 const axios = require('axios');
 const FormData = require('form-data');
 
+// Debug Middleware: Log all incoming requests
+app.use((req, res, next) => {
+    console.log(`[Traffic] ${req.method} ${req.url}`);
+    next();
+});
+
+// Priority Auth Routes
+const authController = require('./controllers/auth.controller');
+console.log('[System] Registering PRIORITY Auth Routes');
+app.post('/api/auth/login', authController.login);
+app.post('/api/auth/signup', authController.signup);
+
 app.post('/api/identify', upload.single('image'), async (req, res) => {
     try {
         console.log(`[API] Received identification request. File: ${req.file?.originalname}`);
@@ -148,13 +160,8 @@ app.post('/api/identify', upload.single('image'), async (req, res) => {
 });
 
 
-// Auth Routes 
-const authController = require('./controllers/auth.controller');
-console.log('[System] Initializing Auth Routes: /api/auth/login, /api/auth/signup');
-app.post('/api/auth/login', authController.login);
-app.post('/api/auth/signup', authController.signup);
-
 app.use('/api/history', require('./controllers/history.controller'));
+
 
 
 const { verifyToken } = require('./middleware/auth.middleware');
