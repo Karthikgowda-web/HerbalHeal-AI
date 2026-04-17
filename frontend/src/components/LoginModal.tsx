@@ -24,7 +24,8 @@ export function LoginModal({ isOpen, onClose }: LoginModalProps) {
     setIsLoading(true);
     setError(null);
 
-    const endpoint = isLogin ? '/auth/login' : '/auth/signup';
+    const endpoint = isLogin ? '/auth/login' : '/auth/register';
+
 
     try {
       const fullUrl = `${API_BASE_URL}${endpoint}`;
