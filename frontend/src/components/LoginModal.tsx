@@ -9,6 +9,8 @@ interface LoginModalProps {
   onClose: () => void;
 }
 
+import { API_BASE_URL } from '../config';
+
 export function LoginModal({ isOpen, onClose }: LoginModalProps) {
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState('');
@@ -22,19 +24,15 @@ export function LoginModal({ isOpen, onClose }: LoginModalProps) {
     setIsLoading(true);
     setError(null);
 
-    const isSignUp = !isLogin;
     const endpoint = isLogin ? '/auth/login' : '/auth/signup';
 
     try {
-      let baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api';
-      
-      // Ensure the URL is clean
-      const cleanBase = baseUrl.replace(/\/$/, '');
-      const fullUrl = `${cleanBase}${endpoint}`;
+      const fullUrl = `${API_BASE_URL}${endpoint}`;
       
       console.log(`[Auth] Attempting ${isLogin ? 'Login' : 'Signup'} at: ${fullUrl}`);
 
       const response = await axios.post(fullUrl, {
+
         email,
         password
       });
