@@ -24,8 +24,9 @@ python3 --version
 
 echo "Installing Python dependencies..."
 python3 -m pip install --upgrade pip
-# Prioritize tensorflow-cpu to support latest model opcodes (like FULLY_CONNECTED v12)
-python3 -m pip install numpy pillow tensorflow-cpu
+# Use lightweight tflite-runtime instead of heavy tensorflow for 10x faster startup on Render
+python3 -m pip install numpy pillow tflite-runtime
+
 
 # Create/Sync Admin User
 echo "Syncing admin credentials..."

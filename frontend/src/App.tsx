@@ -591,22 +591,48 @@ export default function App() {
                           onClick={handleIdentify}
                           disabled={isIdentifying}
                           className={cn(
-                            "w-full py-5 rounded-2xl font-bold text-white transition-all shadow-xl flex items-center justify-center gap-3",
-                            isIdentifying ? "bg-sage-400 cursor-not-allowed" : "bg-sage-900 hover:bg-black shadow-sage-900/20"
+                            "w-full py-5 rounded-2xl font-bold text-white transition-all shadow-xl flex flex-col items-center justify-center gap-1",
+                            isIdentifying ? "bg-sage-600 cursor-not-allowed" : "bg-sage-900 hover:bg-black shadow-sage-900/20"
                           )}
                         >
                           {isIdentifying ? (
                             <>
-                              <Loader2 className="w-5 h-5 animate-spin" />
-                              Analyzing Specimen...
+                              <div className="flex items-center gap-3">
+                                <Loader2 className="w-5 h-5 animate-spin" />
+                                <span>{
+                                  selectedLanguage === 'hi' ? 'विश्लेषण कर रहा है...' : 
+                                  selectedLanguage === 'kn' ? 'ವಿಶ್ಲೇಷಿಸಲಾಗುತ್ತಿದೆ...' : 
+                                  'Analyzing Specimen...'
+                                }</span>
+                              </div>
+                              <span className="text-[10px] opacity-70 font-medium animate-pulse">
+                                {loadingFactIndex % 3 === 0 ? (
+                                  selectedLanguage === 'hi' ? 'पत्तियों की संरचना की जांच...' : 
+                                  selectedLanguage === 'kn' ? 'ಎಲೆಗಳ ರಚನೆಯನ್ನು ಪರಿಶೀಲಿಸಲಾಗುತ್ತಿದೆ...' : 
+                                  'Scanning leaf morphology...'
+                                ) : loadingFactIndex % 3 === 1 ? (
+                                  selectedLanguage === 'hi' ? 'औषधीय गुणों की पहचान...' : 
+                                  selectedLanguage === 'kn' ? 'ಔಷಧೀಯ ಗುಣಗಳನ್ನು ಗುರುತಿಸುವುದು...' : 
+                                  'Identifying medicinal markers...'
+                                ) : (
+                                  selectedLanguage === 'hi' ? 'डेटाबेस से मिलान कर रहा है...' : 
+                                  selectedLanguage === 'kn' ? 'ಡೇಟಾಬೇಸ್ನೊಂದಿಗೆ ತಾಳೆ ನೋಡಲಾಗುತ್ತಿದೆ...' : 
+                                  'Cross-referencing trilingual records...'
+                                )}
+                              </span>
                             </>
                           ) : (
-                            <>
+                            <div className="flex items-center gap-3">
                               <Leaf className="w-5 h-5" />
-                              Identify Specimen
-                            </>
+                              <span>{
+                                selectedLanguage === 'hi' ? 'पहचान शुरू करें' : 
+                                selectedLanguage === 'kn' ? 'ಗುರುತಿಸುವಿಕೆ ಪ್ರಾರಂಭಿಸಿ' : 
+                                'Identify Specimen'
+                              }</span>
+                            </div>
                           )}
                         </motion.button>
+
                       </div>
                     ) : isCameraOpen && (
                       <div className="space-y-6">
