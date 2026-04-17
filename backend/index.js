@@ -13,7 +13,9 @@ const Archive = require('./models/Archive');
 const app = express();
 const PORT = process.env.PORT || 5000;
 
+// Middleware
 app.use(cors({ origin: ['http://localhost:3000', 'https://herbal-heal-ai.vercel.app'] }));
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
@@ -52,17 +54,17 @@ app.post('/api/identify', upload.single('image'), async (req, res) => {
     const pythonScriptPath = path.join(__dirname, 'scripts', 'predict_tflite.py');
     console.log(`[AI] Spawning Python: ${pythonScriptPath} with image: ${imagePath}`);
 
-    const pythonCommand = 'python3';
+    const pythonCommand = process.env.PYTHON_PATH || 'python3';
     const pyProcess = spawn(pythonCommand, [pythonScriptPath, imagePath], {
         env: { ...process.env, PYTHONUNBUFFERED: '1' }
     });
 
     pyProcess.on('error', (err) => {
-        console.error(`[AI] Spawn Error: ${err.message}`);
+        console.error(`[AI] Spawn Error (${pythonCommand}): ${err.message}`);
         return res.status(500).json({ 
-            message: 'Failed to start AI process. Command not found?', 
-            error: err.message,
-            command: pythonCommand 
+            status: "error",
+            message: `Failed to start Python process (${pythonCommand})`, 
+            error: err.message
         });
     });
 
@@ -70,22 +72,32 @@ app.post('/api/identify', upload.single('image'), async (req, res) => {
     let errorData = '';
 
     pyProcess.stdout.on('data', (data) => {
-        predictionData += data.toString();
+        const chunk = data.toString();
+        predictionData += chunk;
+        console.log(`[Python Stdout]: ${chunk.trim()}`);
     });
 
     pyProcess.stderr.on('data', (data) => {
-        errorData += data.toString();
-        console.error(`[Python Stderr]: ${data}`);
+        const chunk = data.toString();
+        errorData += chunk;
+        console.error(`[Python Stderr]: ${chunk.trim()}`);
     });
 
     pyProcess.on('close', (code) => {
-        console.log(`[AI] Python process closed with code ${code}`);
+        console.log(`[AI] Python process exited with code ${code}`);
+        
         if (code !== 0) {
-            console.error(`[AI] Error Detail: ${errorData}`);
-            return res.status(500).send({ message: 'Error processing image to predict plant.', error: errorData });
+            const combinedError = (errorData + "\n" + predictionData).trim();
+            console.error(`[AI] Execution Failed. Output:\n${combinedError}`);
+            return res.status(500).json({ 
+                status: "error",
+                message: 'AI prediction failed', 
+                error: combinedError || 'Internal Python Error'
+            });
         }
         
         try {
+            // Logic to find JSON in potential mixed output
             const startIdx = predictionData.indexOf('{');
             const endIdx = predictionData.lastIndexOf('}');
             if (startIdx === -1 || endIdx === -1) {

@@ -2,37 +2,56 @@ import sys
 import json
 import os
 
+# Set output to flush immediately for Node.js capturing
+def log_json(data):
+    print(json.dumps(data))
+    sys.stdout.flush()
+
 try:
     import numpy as np
     from PIL import Image
     import tflite_runtime.interpreter as tflite
 except Exception as e:
-    print(json.dumps({"error": f"Dependency Error: {str(e)}"}))
+    log_json({"error": f"Dependency Error: {str(e)}"})
     sys.exit(1)
 
 def predict_plant(image_path):
-    if not os.path.exists(image_path):
-        return {"error": "Image file not found."}
-
-    # Absolute pathing for Render
-    current_dir = os.path.dirname(os.path.abspath(__file__))
-    # backend/scripts -> /models (up two levels)
-    root_dir = os.path.dirname(os.path.dirname(current_dir))
-    model_path = os.path.join(root_dir, 'models', 'plant_model.tflite')
-    labels_path = os.path.join(root_dir, 'models', 'labels.json')
-
-    if not os.path.exists(model_path):
-        print(json.dumps({"error": f"CRITICAL: Model file missing at {model_path}"}))
-        sys.exit(1)
-    
-    if not os.path.exists(labels_path):
-        print(json.dumps({"error": f"CRITICAL: Labels file missing at {labels_path}"}))
-        sys.exit(1)
-
     try:
+        if not os.path.exists(image_path):
+            log_json({"error": f"Image file not found: {image_path}"})
+            sys.exit(1)
+
+        # Absolute pathing for Render
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        # backend/scripts -> /models (up one level)
+        root_dir = os.path.dirname(os.path.dirname(current_dir))
+        model_path = os.path.join(root_dir, 'models', 'plant_model.tflite')
+        labels_path = os.path.join(root_dir, 'models', 'labels.json')
+
+        # Check model file existence explicitly
+        if not os.path.exists(model_path):
+            log_json({
+                "error": "Model file not found",
+                "path": model_path,
+                "suggestion": "Ensure plant_model.tflite is in the /models directory"
+            })
+            sys.exit(1)
+        
+        if not os.path.exists(labels_path):
+            log_json({
+                "error": "Labels file not found",
+                "path": labels_path,
+                "suggestion": "Ensure labels.json is in the /models directory"
+            })
+            sys.exit(1)
+
         # 1. Initialize TFLite interpreter
-        interpreter = tflite.Interpreter(model_path=model_path)
-        interpreter.allocate_tensors()
+        try:
+            interpreter = tflite.Interpreter(model_path=model_path)
+            interpreter.allocate_tensors()
+        except Exception as e:
+            log_json({"error": f"TFLite Initialization Error: {str(e)}"})
+            sys.exit(1)
 
         # 2. Get input and output details
         input_details = interpreter.get_input_details()
@@ -59,13 +78,14 @@ def predict_plant(image_path):
         confidence = float(np.max(output_data))
 
         # 7. Map to label
-        with open(labels_path, 'r') as f:
-            labels = json.load(f)
-        
-        # Assuming labels.json is a list where index matches prediction_idx
-        # If labels.json is a dict, adjust accordingly.
-        # Format: { "0": "Tulsi", "1": "Neem", ... }
-        plant_name = labels.get(str(prediction_idx), "Unknown SPECIMEN")
+        try:
+            with open(labels_path, 'r') as f:
+                labels = json.load(f)
+            
+            plant_name = labels.get(str(prediction_idx), "Unknown SPECIMEN")
+        except Exception as e:
+            log_json({"error": f"Label Loading Error: {str(e)}"})
+            sys.exit(1)
         
         # Return result as JSON string (so Node.js can parse)
         result = {
@@ -73,15 +93,18 @@ def predict_plant(image_path):
             "prediction": plant_name,
             "confidence": confidence
         }
-        print(json.dumps(result))
+        log_json(result)
 
+    except FileNotFoundError as fnf:
+        log_json({"error": "File Not Found Error", "details": str(fnf)})
+        sys.exit(1)
     except Exception as e:
-        print(json.dumps({"error": str(e)}))
+        log_json({"error": f"Inference execution failed: {str(e)}"})
         sys.exit(1)
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print(json.dumps({"error": "No image path provided."}))
+        log_json({"error": "No image path provided."})
         sys.exit(1)
     
     image_path = sys.argv[1]
