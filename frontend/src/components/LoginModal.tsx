@@ -22,15 +22,19 @@ export function LoginModal({ isOpen, onClose }: LoginModalProps) {
     setIsLoading(true);
     setError(null);
 
+    const isSignUp = !isLogin;
     const endpoint = isLogin ? '/auth/login' : '/auth/signup';
 
     try {
       let baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api';
-      if (!baseUrl.endsWith('/api')) {
-        baseUrl = baseUrl.replace(/\/$/, '') + '/api';
-      }
+      
+      // Ensure the URL is clean
+      const cleanBase = baseUrl.replace(/\/$/, '');
+      const fullUrl = `${cleanBase}${endpoint}`;
+      
+      console.log(`[Auth] Attempting ${isLogin ? 'Login' : 'Signup'} at: ${fullUrl}`);
 
-      const response = await axios.post(`${baseUrl}${endpoint}`, {
+      const response = await axios.post(fullUrl, {
         email,
         password
       });
@@ -38,8 +42,9 @@ export function LoginModal({ isOpen, onClose }: LoginModalProps) {
       login(response.data.token, response.data.user.email);
       onClose();
     } catch (err: any) {
-      console.error('Auth error:', err);
-      setError(err.response?.data?.message || `Failed to ${isLogin ? 'sign in' : 'create account'}.`);
+      console.error('[Auth Error Details]:', err.response?.data || err.message);
+      const serverMsg = err.response?.data?.message;
+      setError(serverMsg || `Failed to ${isLogin ? 'sign in' : 'create account'}. ${err.message}`);
     } finally {
       setIsLoading(false);
     }
