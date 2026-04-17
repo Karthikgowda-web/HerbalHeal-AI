@@ -16,5 +16,9 @@ mkdir -p dist
 cp -rv frontend/dist/* dist/
 
 # Install Python dependencies for AI Model
-# Note: Render provides a python environment alongside node.
-pip install numpy pillow tflite-runtime
+echo "Checking Python version..."
+python3 --version
+
+echo "Installing Python dependencies..."
+python3 -m pip install --upgrade pip
+python3 -m pip install numpy pillow tflite-runtime
