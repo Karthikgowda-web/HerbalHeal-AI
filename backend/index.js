@@ -148,11 +148,14 @@ app.post('/api/identify', upload.single('image'), async (req, res) => {
 });
 
 
-app.use('/api/history', require('./controllers/history.controller'));
-
+// Auth Routes 
 const authController = require('./controllers/auth.controller');
+console.log('[System] Initializing Auth Routes: /api/auth/login, /api/auth/signup');
 app.post('/api/auth/login', authController.login);
 app.post('/api/auth/signup', authController.signup);
+
+app.use('/api/history', require('./controllers/history.controller'));
+
 
 const { verifyToken } = require('./middleware/auth.middleware');
 app.patch('/api/remedies/:id/verify', verifyToken, async (req, res) => {
