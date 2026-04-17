@@ -12,33 +12,25 @@ export interface SavedPlant extends IdentificationResult {
   createdAt: string;
 }
 
-const API_BASE_URL = 'http://localhost:5000/api';
+let baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api';
+if (!baseUrl.endsWith('/api')) {
+  baseUrl = baseUrl.replace(/\/$/, '') + '/api';
+}
+const API_BASE_URL = baseUrl;
 
 export async function savePlantToLibrary(result: IdentificationResult, base64Image: string) {
   try {
-    
+    // Corrected keys to match history.controller.js: 
+    // commonName, scientificName, remedies, imagePath
     const response = await axios.post(`${API_BASE_URL}/history`, {
-      plant_name: result.name,
-      scientific_name: result.scientific_name,
-      image_url: base64Image,
-      overview: result.overview,
-      remedies: result.remedies,
-      alternatives: result.alternatives,
-      medicinalProperties: result.medicinalProperties,
-      warnings: result.warnings,
-      cnnAnalysis: result.cnnAnalysis
-    });
-
-    
-    await axios.post(`${API_BASE_URL}/archive`, {
-      name: result.name || (result as any).plant_name || "Unknown",
-      scientificName: result.scientific_name || "Unknown",
-      imageUrl: base64Image,
+      commonName: result.name,
+      scientificName: result.scientific_name,
+      imagePath: base64Image, // Map base64 to imagePath as expected by backend
       remedies: result.remedies,
       timestamp: new Date().toISOString()
     });
 
-    return response.data._id;
+    return response.data.historyId;
   } catch (error) {
     console.error("Error saving plant to library:", error);
     throw error;
