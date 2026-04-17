@@ -8,9 +8,10 @@ interface NavbarProps {
   mode: 'identify' | 'search' | 'library';
   setMode: (mode: 'identify' | 'search' | 'library') => void;
   reset: () => void;
+  onSignIn: () => void;
 }
 
-export function Navbar({ mode, setMode, reset }: NavbarProps) {
+export function Navbar({ mode, setMode, reset, onSignIn }: NavbarProps) {
   const { user, logout } = useAuth();
 
   return (
@@ -75,6 +76,7 @@ export function Navbar({ mode, setMode, reset }: NavbarProps) {
           <motion.button 
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
+            onClick={onSignIn}
             className="px-8 py-3 bg-sage-900 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-xl shadow-sage-900/20 hover:bg-black transition-all"
           >
             Sign In

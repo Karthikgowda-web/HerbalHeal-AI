@@ -12,6 +12,7 @@ import axios from 'axios';
 import { ResultCard } from './components/ResultCard';
 
 import { Navbar } from './components/Navbar';
+import { LoginModal } from './components/LoginModal';
 import { useAuth } from './context/AuthContext';
 
 
@@ -53,6 +54,7 @@ export default function App() {
   const [selectedLanguage, setSelectedLanguage] = useState<'en' | 'hi' | 'kn'>('en');
 
   const { user: currentUser, token } = useAuth();
+  const [isLoginOpen, setIsLoginOpen] = useState(false);
   const [toastMsg, setToastMsg] = useState<{ message: string, visible: boolean }>({ message: '', visible: false });
 
   const showToast = (message: string) => {
@@ -509,7 +511,9 @@ export default function App() {
 
       {}
       {}
-      <Navbar mode={mode} setMode={setMode} reset={reset} />
+      <LoginModal isOpen={isLoginOpen} onClose={() => setIsLoginOpen(false)} />
+
+      <Navbar mode={mode} setMode={setMode} reset={reset} onSignIn={() => setIsLoginOpen(true)} />
 
       <main className="relative max-w-5xl mx-auto px-4 mt-12">
         <div className={cn("grid gap-12", mode === 'library' ? "grid-cols-1" : "grid-cols-1 lg:grid-cols-12")}>
