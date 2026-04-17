@@ -12,11 +12,8 @@ export interface SavedPlant extends IdentificationResult {
   createdAt: string;
 }
 
-let baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api';
-if (!baseUrl.endsWith('/api')) {
-  baseUrl = baseUrl.replace(/\/$/, '') + '/api';
-}
-const API_BASE_URL = baseUrl;
+import { API_BASE_URL } from '../config';
+
 
 export async function savePlantToLibrary(result: IdentificationResult, base64Image: string) {
   try {

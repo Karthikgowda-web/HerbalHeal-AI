@@ -9,6 +9,7 @@ import { remedyBank, type RemedyData } from './data/remedyBank';
 import { savePlantToLibrary, getSavedPlants, type SavedPlant } from './services/databaseService';
 import { cn } from './lib/utils';
 import axios from 'axios';
+import { API_BASE_URL } from './config';
 import { ResultCard } from './components/ResultCard';
 
 import { Navbar } from './components/Navbar';
@@ -220,33 +221,24 @@ export default function App() {
       setResult(data);
       setIsSaved(false); 
       
-      const baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api';
-      axios.post(`${baseUrl}/history`, {
+      axios.post(`${API_BASE_URL}/history`, {
         commonName: data.name || (data as any).plant_name || 'Unknown',
         scientificName: data.scientific_name || 'Unknown',
         remedies: data.remedies || {},
         imagePath: image,
         timestamp: new Date()
-      }).then((res) => {
-        console.log("History persistence response:", res);
-        if (res.status !== 201) {
-          alert('Warning: History auto-save did not return expected status (201).');
-        }
-        if (res.data?.historyId) {
-          setCurrentHistoryId(res.data.historyId);
-        }
-      }).catch((e) => {
-        console.error('Failed to auto-save history:', e);
-        alert('Server error preventing history save.');
-      });
+      }).then(res => {
+        if (res.data?.historyId) setCurrentHistoryId(res.data.historyId);
+      }).catch(e => console.error('History save failed:', e));
       
-    } catch (err) {
-      setError("Failed to identify plant. Please try a clearer photo.");
+    } catch (err: any) {
+      setError(err.message || "Failed to identify plant. Please try a clearer photo.");
       console.error(err);
     } finally {
       setIsIdentifying(false);
     }
   };
+
 
   const [activeTab, setActiveTab] = useState<TabType>('overview');
   const resultRef = useRef<HTMLDivElement>(null);

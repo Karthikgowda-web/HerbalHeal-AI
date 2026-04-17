@@ -48,130 +48,105 @@ app.get('/', (req, res) => {
     res.send('HerbaScan Backend is running!');
 });
 
+const axios = require('axios');
+const FormData = require('form-data');
+
 app.post('/api/identify', upload.single('image'), async (req, res) => {
     try {
         console.log(`[API] Received identification request. File: ${req.file?.originalname}`);
-    if (!req.file) {
-        return res.status(400).send({ message: 'No file uploaded' });
-    }
+        if (!req.file) {
+            return res.status(400).send({ message: 'No file uploaded' });
+        }
 
-    const imagePath = req.file.path;
-    const pythonScriptPath = path.join(__dirname, 'scripts', 'predict_tflite.py');
-    console.log(`[AI] Spawning Python: ${pythonScriptPath} with image: ${imagePath}`);
+        const imagePath = req.file.path;
+        let aiResult = null;
 
-    const pythonCommand = process.env.PYTHON_PATH || 'python3';
-    const pyProcess = spawn(pythonCommand, [pythonScriptPath, imagePath], {
-        env: { ...process.env, PYTHONUNBUFFERED: '1' }
-    });
+        // Try Calling Persistent AI Service (FastAPI)
+        try {
+            const formData = new FormData();
+            formData.append('file', fs.createReadStream(imagePath));
 
-    pyProcess.on('error', (err) => {
-        console.error(`[AI] Spawn Error (${pythonCommand}): ${err.message}`);
-        return res.status(500).json({ 
-            status: "error",
-            message: `Failed to start Python process (${pythonCommand})`, 
-            error: err.message
-        });
-    });
+            console.log(`[AI] Calling persistent service at http://127.0.0.1:5001/predict`);
+            const aiResponse = await axios.post('http://127.0.0.1:5001/predict', formData, {
+                headers: { ...formData.getHeaders() },
+                timeout: 10000
+            });
+            aiResult = aiResponse.data;
+            console.log(`[AI] Persistent service response: ${JSON.stringify(aiResult)}`);
+        } catch (serviceErr) {
+            console.warn(`[AI] Persistent service unavailable, falling back to spawn: ${serviceErr.message}`);
+            
+            // FALLBACK: Old spawn method if service is not running
+            const pythonScriptPath = path.join(__dirname, 'scripts', 'predict_tflite.py');
+            const pythonCommand = process.env.PYTHON_PATH || 'python3';
+            
+            const pythonTask = () => new Promise((resolve, reject) => {
+                let predictionData = '';
+                let errorData = '';
+                const pyProcess = spawn(pythonCommand, [pythonScriptPath, imagePath]);
+                pyProcess.stdout.on('data', (d) => predictionData += d.toString());
+                pyProcess.stderr.on('data', (d) => errorData += d.toString());
+                pyProcess.on('close', (code) => {
+                    if (code !== 0) reject(new Error(errorData || 'Python crash'));
+                    try {
+                        const startIdx = predictionData.indexOf('{');
+                        const endIdx = predictionData.lastIndexOf('}');
+                        resolve(JSON.parse(predictionData.substring(startIdx, endIdx + 1)));
+                    } catch (e) { reject(e); }
+                });
+            });
+            aiResult = await pythonTask();
+        }
 
-    let predictionData = '';
-    let errorData = '';
+        if (!aiResult || aiResult.plant_id === undefined) {
+            throw new Error("Invalid AI prediction result");
+        }
 
-    pyProcess.stdout.on('data', (data) => {
-        const chunk = data.toString();
-        predictionData += chunk;
-        console.log(`[Python Stdout]: ${chunk.trim()}`);
-    });
-
-    pyProcess.stderr.on('data', (data) => {
-        const chunk = data.toString();
-        errorData += chunk;
-        console.error(`[Python Stderr]: ${chunk.trim()}`);
-    });
-
-    pyProcess.on('close', (code) => {
-        console.log(`[AI] Python process exited with code ${code}`);
+        // Trilingual database lookup
+        const mongoData = await Plant.findOne({ plant_id: aiResult.plant_id });
         
-        if (code !== 0) {
-            const combinedError = (errorData + "\n" + predictionData).trim();
-            console.error(`[AI] Execution Failed. Output:\n${combinedError}`);
-            return res.status(500).json({ 
-                status: "error",
-                message: 'AI prediction failed', 
-                error: combinedError || 'Internal Python Error'
+        if (!mongoData) {
+            return res.status(200).json({
+                name: aiResult.prediction || "Unknown Specimen",
+                scientific_name: "Species recognized by AI",
+                overview: { 
+                    en: "AI identified this plant, but we don't have its trilingual details in our medical database yet.", 
+                    hi: "एआई ने इस पौधे की पहचान की है, लेकिन हमारे डेटाबेस में अभी इसका विवरण नहीं है।", 
+                    kn: "AI ಈ ಸಸ್ಯವನ್ನು ಗುರುತಿಸಿದೆ, ಆದರೆ ನಮ್ಮ ಡೇಟಾಬೇಸ್‌ನಲ್ಲಿ ಇದರ ವಿವರಗಳು ಇನ್ನೂ ಲಭ್ಯವಿಲ್ಲ." 
+                },
+                remedies: { en: "Information coming soon.", hi: "जानकारी जल्द ही आ रही है।", kn: "ಮಾಹಿತಿ ಶೀಘ್ರದಲ್ಲೇ ಬರಲಿದೆ." },
+                alternatives: { en: [], hi: [], kn: [] },
+                medicinalProperties: ["Recognized via Local ML Model"],
+                warnings: "Consult a professional before use.",
+                cnnAnalysis: {
+                    confidence: aiResult.confidence || 0.0,
+                    featuresIdentified: ["Morphology matched correctly"],
+                    neuralMarkers: "Processed via 40-class MobileNetV2"
+                }
             });
         }
-        
-        try {
-            // Logic to find JSON in potential mixed output
-            const startIdx = predictionData.indexOf('{');
-            const endIdx = predictionData.lastIndexOf('}');
-            if (startIdx === -1 || endIdx === -1) {
-                throw new Error("No JSON found in Python output");
-            }
-            const jsonStr = predictionData.substring(startIdx, endIdx + 1);
-            const aiResult = JSON.parse(jsonStr);
-            console.log(`[DB] Attempting lookup for Plant ID: ${aiResult.plant_id} (${aiResult.prediction})`);
-            
-            Plant.findOne({ plant_id: aiResult.plant_id })
-                .then(mongoData => {
-                    if (!mongoData) {
-                        console.warn(`[DB] No matching document found in Atlas for ID: ${aiResult.plant_id}`);
-                        return res.status(200).json({
-                            name: aiResult.prediction || "Unknown Specimen",
-                            scientific_name: "Species recognized by AI",
-                            overview: { 
-                                en: "AI identified this plant, but we don't have its medicinal details in our current database yet.", 
-                                hi: "एआई ने इस पौधे की पहचान की है, लेकिन अभी हमारे पास इसका औषधीय विवरण नहीं है।", 
-                                kn: "AI ಈ ಸಸ್ಯವನ್ನು ಗುರುತಿಸಿದೆ, ಆದರೆ ನಮ್ಮ ಡೇಟಾಬೇಸ್‌ನಲ್ಲಿ ಇದರ ಔಷಧೀಯ ವಿವರಗಳು ಇನ್ನೂ ಲಬ್ಯವಿಲ್ಲ." 
-                            },
-                            remedies: { 
-                                en: "No specific remedies found in local database.", 
-                                hi: "स्थानीय डेटाबेस में कोई विशिष्ट उपचार नहीं मिला।", 
-                                kn: "ಸ್ಥಳೀಯ ಡೇಟಾಬೇಸ್‌ನಲ್ಲಿ ಯಾವುದೇ ನಿರ್ದಿಷ್ಟ ಪರಿಹಾರಗಳು ಕಂಡುಬಂದಿಲ್ಲ." 
-                            },
-                            alternatives: { en: [], hi: [], kn: [] },
-                            medicinalProperties: ["Recognized from 40-class dataset"],
-                            warnings: "Always verify with a professional before use.",
-                            cnnAnalysis: {
-                                confidence: aiResult.confidence || 0.0,
-                                featuresIdentified: ["Morphology matched correctly"],
-                                neuralMarkers: "Verified via 40-class MobileNetV2 model."
-                            }
-                        });
-                    }
 
-                    console.log(`[DB] Successfully fetched trilingual data for: ${mongoData.name}`);
-                    
-                    const finalResponse = { 
-                        name: mongoData.name, 
-                        scientific_name: mongoData.scientific_name,
-                        overview: mongoData.overview,
-                        remedies: mongoData.remedies,
-                        alternatives: mongoData.alternatives,
-                        medicinalProperties: mongoData.medicinalProperties || ["Natural Extract", "Traditional Use"],
-                        warnings: mongoData.warnings || "Safe for general external use. Consult a doctor for internal consumption.",
-                        cnnAnalysis: {
-                            confidence: aiResult.confidence,
-                            featuresIdentified: ["Vein structure matched", "Leaf serration analyzed"],
-                            neuralMarkers: "Processed via fine-tuned MobileNetV2"
-                        }
-                    };
-                    res.json(finalResponse);
-                })
-                .catch(dbError => {
-                    console.error('Database query fallback invoked:', dbError.message);
-                    res.status(500).json({ message: "Database connection error." });
-                });
-        } catch (error) {
-            console.error('Error parsing Python output:', error, 'Output:', predictionData);
-            res.status(500).send({ message: 'Invalid response from AI model.' });
-        }
-    });
-    } catch (routeErr) {
-        console.error(`[API] Global Route Crash: ${routeErr}`);
-        res.status(500).json({ status: "error", message: routeErr.message });
+        res.json({ 
+            name: mongoData.name, 
+            scientific_name: mongoData.scientific_name,
+            overview: mongoData.overview,
+            remedies: mongoData.remedies,
+            alternatives: mongoData.alternatives,
+            medicinalProperties: mongoData.medicinalProperties || ["Natural Extract"],
+            warnings: mongoData.warnings || "Safe for external use.",
+            cnnAnalysis: {
+                confidence: aiResult.confidence,
+                featuresIdentified: ["Leaf/stem analysis complete"],
+                neuralMarkers: "Verified via persistent AI runner"
+            }
+        });
+
+    } catch (err) {
+        console.error(`[API] Identify Error: ${err.message}`);
+        res.status(500).json({ status: "error", message: err.message });
     }
 });
+
 
 app.use('/api/history', require('./controllers/history.controller'));
 
