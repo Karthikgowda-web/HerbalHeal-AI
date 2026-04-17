@@ -7,21 +7,24 @@ async function createAdmin() {
   try {
     await mongoose.connect(process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/herbascan');
     
-    const existing = await User.findOne({ email: 'admin@herbalheal.com' });
+    const adminEmail = process.env.ADMIN_EMAIL || 'admin@herbalheal.com';
+    const adminPassword = process.env.ADMIN_PASSWORD || 'admin123';
+
+    const existing = await User.findOne({ email: adminEmail });
     if (existing) {
-      console.log("Admin user already exists.");
+      console.log(`Admin user with email ${adminEmail} already exists.`);
       process.exit(0);
     }
 
-    const hashedPassword = await bcrypt.hash('admin123', 10);
+    const hashedPassword = await bcrypt.hash(adminPassword, 10);
     const admin = new User({
-      email: 'admin@herbalheal.com',
+      email: adminEmail,
       password: hashedPassword,
       role: 'admin'
     });
 
     await admin.save();
-    console.log("Admin user created successfully: admin@herbalheal.com / admin123");
+    console.log(`Admin user created successfully! Email: ${adminEmail}`);
     process.exit(0);
   } catch (err) {
     console.error("Error creating admin:", err);

@@ -26,3 +26,7 @@ echo "Installing Python dependencies..."
 python3 -m pip install --upgrade pip
 # Prioritize tensorflow-cpu to support latest model opcodes (like FULLY_CONNECTED v12)
 python3 -m pip install numpy pillow tensorflow-cpu
+
+# Create/Sync Admin User
+echo "Syncing admin credentials..."
+node backend/create_admin.js

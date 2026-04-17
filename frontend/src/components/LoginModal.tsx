@@ -10,16 +10,19 @@ interface LoginModalProps {
 }
 
 export function LoginModal({ isOpen, onClose }: LoginModalProps) {
+  const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { login } = useAuth();
 
-  const handleLogin = async (e: React.FormEvent) => {
+  const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
     setError(null);
+
+    const endpoint = isLogin ? '/auth/login' : '/auth/signup';
 
     try {
       let baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api';
@@ -27,7 +30,7 @@ export function LoginModal({ isOpen, onClose }: LoginModalProps) {
         baseUrl = baseUrl.replace(/\/$/, '') + '/api';
       }
 
-      const response = await axios.post(`${baseUrl}/auth/login`, {
+      const response = await axios.post(`${baseUrl}${endpoint}`, {
         email,
         password
       });
@@ -35,8 +38,8 @@ export function LoginModal({ isOpen, onClose }: LoginModalProps) {
       login(response.data.token, response.data.user.email);
       onClose();
     } catch (err: any) {
-      console.error('Login error:', err);
-      setError(err.response?.data?.message || 'Failed to sign in. Please check your credentials.');
+      console.error('Auth error:', err);
+      setError(err.response?.data?.message || `Failed to ${isLogin ? 'sign in' : 'create account'}.`);
     } finally {
       setIsLoading(false);
     }
@@ -72,8 +75,14 @@ export function LoginModal({ isOpen, onClose }: LoginModalProps) {
                 </button>
               </div>
 
-              <h2 className="text-3xl font-serif font-bold text-sage-900 mb-2">Admin Portal</h2>
-              <p className="text-sage-500 text-sm mb-8 font-medium">Please sign in to access botanical verification tools.</p>
+              <h2 className="text-3xl font-serif font-bold text-sage-900 mb-2">
+                {isLogin ? 'Admin Portal' : 'Create Account'}
+              </h2>
+              <p className="text-sage-500 text-sm mb-8 font-medium">
+                {isLogin 
+                  ? 'Please sign in to access botanical verification tools.' 
+                  : 'Join HerbaScan to start building your personal botanical library.'}
+              </p>
 
               {error && (
                 <motion.div 
@@ -86,7 +95,7 @@ export function LoginModal({ isOpen, onClose }: LoginModalProps) {
                 </motion.div>
               )}
 
-              <form onSubmit={handleLogin} className="space-y-6">
+              <form onSubmit={handleAuth} className="space-y-6">
                 <div className="space-y-2">
                   <label className="text-[10px] font-black uppercase tracking-widest text-sage-400 ml-1">Email Address</label>
                   <div className="relative group">
@@ -130,10 +139,19 @@ export function LoginModal({ isOpen, onClose }: LoginModalProps) {
                       Authenticating...
                     </>
                   ) : (
-                    "Authorize Access"
+                    isLogin ? "Authorize Access" : "Create Account"
                   )}
                 </motion.button>
               </form>
+
+              <div className="mt-8 text-center">
+                <button 
+                  onClick={() => setIsLogin(!isLogin)}
+                  className="text-xs font-bold text-sage-400 hover:text-sage-900 transition-colors uppercase tracking-widest"
+                >
+                  {isLogin ? "Don't have an account? Sign Up" : "Already have an account? Sign In"}
+                </button>
+              </div>
             </div>
           </motion.div>
         </motion.div>

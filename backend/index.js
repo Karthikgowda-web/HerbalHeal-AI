@@ -177,6 +177,7 @@ app.use('/api/history', require('./controllers/history.controller'));
 
 const authController = require('./controllers/auth.controller');
 app.post('/api/auth/login', authController.login);
+app.post('/api/auth/signup', authController.signup);
 
 const { verifyToken } = require('./middleware/auth.middleware');
 app.patch('/api/remedies/:id/verify', verifyToken, async (req, res) => {
