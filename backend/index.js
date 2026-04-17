@@ -174,6 +174,10 @@ app.patch('/api/remedies/:id/verify', verifyToken, async (req, res) => {
     }
 });
 
+const DEPLOY_ID = "REL-2026-04-17-V1";
+
 app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
+    console.log(`[CRITICAL] HerbaScan Alpha ${DEPLOY_ID} active on port ${PORT}`);
+    console.log(`[System] Priority Routes: AUTH/SIGNUP, AUTH/LOGIN, TRAFFIC_LOGS`);
 });
+
