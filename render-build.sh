@@ -2,8 +2,11 @@
 # Exit on error
 set -o errexit
 
-# Install Node dependencies for backend
+# Install Node dependencies for root and backend
 npm install
+cd backend
+npm install
+cd ..
 
 # Build frontend
 cd frontend
