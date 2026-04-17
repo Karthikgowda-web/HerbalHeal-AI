@@ -51,17 +51,16 @@ app.get('/', (req, res) => {
 const axios = require('axios');
 const FormData = require('form-data');
 
-// Debug Middleware: Log all incoming requests
+// Auth & Traffic Debugging
+const authRoutes = require('./routes/auth');
 app.use((req, res, next) => {
     console.log(`[Traffic] ${req.method} ${req.url}`);
     next();
 });
 
-// Priority Auth Routes
-const authController = require('./controllers/auth.controller');
-console.log('[System] Registering PRIORITY Auth Routes');
-app.post('/api/auth/login', authController.login);
-app.post('/api/auth/signup', authController.signup);
+// Mounted Routes
+app.use('/api/auth', authRoutes);
+
 
 app.post('/api/identify', upload.single('image'), async (req, res) => {
     try {
