@@ -113,5 +113,9 @@ if __name__ == "__main__":
         log_json({"error": "No image path provided."})
         sys.exit(1)
     
-    image_path = sys.argv[1]
+    # Immediate heartbeat to prevent Node.js timeout during cold-start
+    print("HEARTBEAT:LOADING_LIBS")
+    sys.stdout.flush()
+    
     predict_plant(image_path)
+

@@ -62,8 +62,9 @@ export async function identifyPlant(base64Image: string): Promise<Identification
 
     const response = await axios.post(`${API_BASE_URL}/identify`, formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
-      timeout: 50000 // Increased to 50s for Render free tier cold-starts
+      timeout: 90000 // Increased to 90s for Render's most extreme cold-starts
     });
+
 
 
     return response.data;

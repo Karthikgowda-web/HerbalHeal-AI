@@ -125,11 +125,15 @@ app.post('/api/identify', upload.single('image'), async (req, res) => {
                 pyProcess.on('close', (code) => {
                     if (code !== 0) reject(new Error(errorData || 'Python crash'));
                     try {
-                        const startIdx = predictionData.indexOf('{');
-                        const endIdx = predictionData.lastIndexOf('}');
-                        resolve(JSON.parse(predictionData.substring(startIdx, endIdx + 1)));
+                        // Clean data - remove HEARTBEAT messages and keep only JSON
+                        const cleanData = predictionData.replace(/HEARTBEAT:[^\n]+\n/g, '').trim();
+                        const startIdx = cleanData.indexOf('{');
+                        const endIdx = cleanData.lastIndexOf('}');
+                        if (startIdx === -1) throw new Error("No JSON found: " + cleanData);
+                        resolve(JSON.parse(cleanData.substring(startIdx, endIdx + 1)));
                     } catch (e) { reject(e); }
                 });
+
             });
             aiResult = await pythonTask();
         }
