@@ -52,14 +52,39 @@ const axios = require('axios');
 const FormData = require('form-data');
 
 // Auth & Traffic Debugging
-const authRoutes = require('./routes/auth');
+const User = require('./models/User');
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
+
 app.use((req, res, next) => {
     console.log(`[Traffic] ${req.method} ${req.url}`);
     next();
 });
 
-// Mounted Routes
+// DIRECT REGISTER ROUTE (Atomic Fix)
+app.post('/api/auth/register', async (req, res) => {
+  try {
+    const { email, password } = req.body;
+    console.log(`[Auth] Registration attempt for: ${email}`);
+    
+    const existingUser = await User.findOne({ email });
+    if (existingUser) return res.status(400).json({ message: 'Email already registered.' });
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const newUser = new User({ email, password: hashedPassword });
+    await newUser.save();
+
+    const token = jwt.sign({ userId: newUser._id }, process.env.JWT_SECRET || 'fallback_secret', { expiresIn: '1d' });
+    res.status(201).json({ token, user: { email: newUser.email, id: newUser._id } });
+  } catch (error) {
+    console.error('[Auth Error]', error);
+    res.status(500).json({ message: 'Signup failed', error: error.message });
+  }
+});
+
+const authRoutes = require('./routes/auth');
 app.use('/api/auth', authRoutes);
+
 
 
 app.post('/api/identify', upload.single('image'), async (req, res) => {
