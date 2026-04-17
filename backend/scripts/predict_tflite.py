@@ -10,7 +10,13 @@ def log_json(data):
 try:
     import numpy as np
     from PIL import Image
-    import tflite_runtime.interpreter as tflite
+    try:
+        import tflite_runtime.interpreter as tflite
+    except ImportError:
+        try:
+            from tensorflow import lite as tflite
+        except ImportError:
+            raise ImportError("Neither 'tflite-runtime' nor 'tensorflow' is installed.")
 except Exception as e:
     log_json({"error": f"Dependency Error: {str(e)}"})
     sys.exit(1)

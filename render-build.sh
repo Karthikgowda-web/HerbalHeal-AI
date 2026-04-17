@@ -21,4 +21,6 @@ python3 --version
 
 echo "Installing Python dependencies..."
 python3 -m pip install --upgrade pip
-python3 -m pip install numpy pillow tflite-runtime
+# Try tflite-runtime first (lightweight), fallback to tensorflow-cpu (heavy but compatible) if it fails
+python3 -m pip install numpy pillow && \
+(python3 -m pip install tflite-runtime || python3 -m pip install tensorflow-cpu)
