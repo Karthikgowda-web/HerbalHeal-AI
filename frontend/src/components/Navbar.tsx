@@ -25,9 +25,13 @@ export function Navbar({ mode, setMode, reset, onSignIn }: NavbarProps) {
             <Leaf className="w-6 h-6 text-white" />
           </motion.div>
           <div>
-            <span className="text-2xl font-serif font-bold text-sage-900 tracking-tight block leading-none">HerbaScan</span>
+            <div className="flex items-center gap-2">
+              <span className="text-2xl font-serif font-bold text-sage-900 tracking-tight block leading-none">HerbaScan</span>
+              <span className="px-1.5 py-0.5 bg-sage-50 text-[7px] font-black text-sage-400 rounded-md border border-sage-100">V1.1.2</span>
+            </div>
             <span className="text-[9px] uppercase tracking-[0.3em] font-black text-sage-400 mt-1 block">Botanical Intelligence</span>
           </div>
+
         </div>
 
         {}
