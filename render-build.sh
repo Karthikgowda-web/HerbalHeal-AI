@@ -25,7 +25,7 @@ python3 --version
 echo "Installing Python dependencies..."
 python3 -m pip install --upgrade pip
 # Use lightweight tflite-runtime instead of heavy tensorflow for 10x faster startup on Render
-python3 -m pip install numpy pillow tflite-runtime
+python3 -m pip install "numpy<2" pillow tflite-runtime
 
 
 # Create/Sync Admin User
