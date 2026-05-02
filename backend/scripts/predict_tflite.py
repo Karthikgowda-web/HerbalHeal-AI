@@ -117,5 +117,6 @@ if __name__ == "__main__":
     print("HEARTBEAT:LOADING_LIBS")
     sys.stdout.flush()
     
+    image_path = sys.argv[1]
     predict_plant(image_path)
 
