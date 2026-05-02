@@ -28,6 +28,7 @@ python3 -m pip install --upgrade pip
 python3 -m pip install "numpy<2" pillow tensorflow-cpu
 
 
-# Create/Sync Admin User
-echo "Syncing admin credentials..."
+# Create/Sync Admin User & Seed Trilingual Data
+echo "Syncing database..."
 node backend/create_admin.js
+node backend/seed_trilingual.js

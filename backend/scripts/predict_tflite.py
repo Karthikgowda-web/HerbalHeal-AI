@@ -92,7 +92,9 @@ def predict_plant(image_path):
             with open(labels_path, 'r') as f:
                 labels = json.load(f)
             
-            plant_name = labels.get(str(prediction_idx), "Unknown SPECIMEN")
+            # Invert the labels dictionary to {index_string: name}
+            inv_labels = {str(v): k for k, v in labels.items()}
+            plant_name = inv_labels.get(str(prediction_idx), "Unknown SPECIMEN")
         except Exception as e:
             log_json({"error": f"Label Loading Error: {str(e)}"})
             sys.exit(1)
