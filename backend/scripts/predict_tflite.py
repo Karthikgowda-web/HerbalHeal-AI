@@ -4,8 +4,12 @@ import os
 
 # Set output to flush immediately for Node.js capturing
 def log_json(data):
-    print(json.dumps(data))
+    msg = json.dumps(data)
+    print(msg)
+    if "error" in data:
+        sys.stderr.write(f"PYTHON_ERROR: {data['error']}\n")
     sys.stdout.flush()
+    sys.stderr.flush()
 
 try:
     import numpy as np

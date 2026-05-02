@@ -123,15 +123,20 @@ app.post('/api/identify', upload.single('image'), async (req, res) => {
                 pyProcess.stdout.on('data', (d) => predictionData += d.toString());
                 pyProcess.stderr.on('data', (d) => errorData += d.toString());
                 pyProcess.on('close', (code) => {
-                    if (code !== 0) reject(new Error(errorData || 'Python crash'));
+                    if (code !== 0) {
+                        const errMsg = errorData || predictionData || 'Python process crashed without output';
+                        return reject(new Error(`AI Service Error (Code ${code}): ${errMsg}`));
+                    }
                     try {
                         // Clean data - remove HEARTBEAT messages and keep only JSON
                         const cleanData = predictionData.replace(/HEARTBEAT:[^\n]+\n/g, '').trim();
                         const startIdx = cleanData.indexOf('{');
                         const endIdx = cleanData.lastIndexOf('}');
-                        if (startIdx === -1) throw new Error("No JSON found: " + cleanData);
+                        if (startIdx === -1) throw new Error("No JSON found in Python output: " + cleanData);
                         resolve(JSON.parse(cleanData.substring(startIdx, endIdx + 1)));
-                    } catch (e) { reject(e); }
+                    } catch (e) { 
+                        reject(new Error(`Failed to parse AI result: ${e.message}. Raw output: ${predictionData}`)); 
+                    }
                 });
 
             });
