@@ -15,12 +15,12 @@ try:
     import numpy as np
     from PIL import Image
     try:
-        import tflite_runtime.interpreter as tflite
+        from tensorflow import lite as tflite
     except ImportError:
         try:
-            from tensorflow import lite as tflite
+            import tflite_runtime.interpreter as tflite
         except ImportError:
-            raise ImportError("Neither 'tflite-runtime' nor 'tensorflow' is installed.")
+            raise ImportError("Neither 'tensorflow' nor 'tflite-runtime' is installed.")
 except Exception as e:
     log_json({"error": f"Dependency Error: {str(e)}"})
     sys.exit(1)
